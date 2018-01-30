@@ -83,6 +83,24 @@ module Contentful
         end
       end
 
+      def update_asset(asset_attributes)
+        logger.info "Update asset - #{asset_attributes['id']} "
+        asset_title = asset_attributes['name'].present? ? asset_attributes['name'] : asset_attributes['id']
+        asset_description = asset_attributes['description'].present? ? asset_attributes['description'] : ''
+        asset_file = create_asset_file(asset_title, asset_attributes)
+
+        space = Contentful::Management::Space.find(config.config['space_id'])
+        asset = space.assets.find(asset_attributes['id'])
+
+        # print asset_file.properties
+        # asset.title = asset_attributes['id']
+        asset.file = asset_file
+
+        asset.save
+        asset.process_file
+        # asset_status(asset, asset_attributes)
+      end
+
       def import_asset(asset_attributes)
         logger.info "Import asset - #{asset_attributes['id']} "
         asset_title = asset_attributes['name'].present? ? asset_attributes['name'] : asset_attributes['id']
@@ -112,6 +130,7 @@ module Contentful
       def asset_status(asset, asset_attributes)
         if asset.is_a?(Contentful::Management::Asset)
           logger.info "Process asset - #{asset.id} "
+          asset.version = 1
           asset.process_file
           CSV.open("#{config.log_files_dir}/success_assets.csv", 'a') { |csv| csv << [asset.id] }
         else
@@ -206,8 +225,8 @@ module Contentful
       end
 
       def create_content_type_fields(collection_attributes, content_type)
-        fields = collection_attributes['fields'].each_with_object([]) do |f, fs|
-          fs << create_field(f)
+        fields = collection_attributes['fields'].each_with_object([]) do |field, fields|
+          fields << create_field(field)
         end
         content_type.fields = fields
         content_type.save
@@ -337,8 +356,8 @@ module Contentful
       end
 
       def create_validations(validations_params)
-        validations = validations_params.each_with_object([]) do |validation_params, vs|
-          vs << create_validation(validation_params)
+        validations = validations_params.each_with_object([]) do |validation_params, validations|
+          validations << create_validation(validation_params)
         end
         return validations
       end
@@ -445,7 +464,7 @@ module Contentful
       def load_log_files
         Dir.glob("#{config.log_files_dir}/*.csv") do |log_files|
           file_name = File.basename(log_files)
-          imported_ids = CSV.read(log_files, 'r').flatten
+          imported_ids update_asset= CSV.read(log_files, 'r').flatten
           config.imported_entries << imported_ids if file_name.start_with?('success_thread') && !config.imported_entries.include?(imported_ids)
         end
       end
